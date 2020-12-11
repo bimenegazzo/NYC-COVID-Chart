@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+    <script src="js/d3.min.js"></script>
+    <script src="js/crossfilter.min.js"></script>
+    <script src="js/dc.min.js"></script>
+    <script src="js/jQueryv3.4.1.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script src="js/FileSaver.js"></script>
+    <script src="data/data.js"></script>
+    <script src="data/covidEvents.js"></script>
+    <script src="data/publicHolidays.js"></script>
+    <link rel="stylesheet" href="css/dc.css">
+    <link rel="stylesheet" href="css/bootstrap.css">
+    <link rel="stylesheet" href="css/custom.css">
+</head>
+
+<body>
+    <div>
+        <div class="container">
+            <div class="row">
+                <div class="col-sm-6" id="titleText">COVID in NYC</div>
+                <div class="col-sm-3">
+                    <input class="btn btn-dark" id="download" role="button" type="button" value="Download Data" onclick="dc.filterAll();dc.renderAll();javascript:download()"/>
+                </div>                  
+            </div>
+            <br>
+            <div class="row">
+                <div class="col-md-6" id="paragraph">
+                    <p>
+                    This is an example of a dc.js Series Chart. 
+                    The chart uses COVID Data published by the Department of Health and Mental Hygiene (DoHMH) of NYC.
+                    Data is fed to the chart using a Python script that makes an API call for it, curates it, and manipulates it into a format that is compatible with this chart type.
+                    The Python script is available for download <a href="https://www.linkedin.com/in/bryan-menegazzo-316293a4/" target="_blank">here</a>.
+                    </p>
+                    <p>    
+                    Users can interact with the data by zooming into or scrolling through either chart below. 
+                    The table to the right summarizes COVID data by geography.
+                    The manipulated data is available for download by clicking the 'Download Data' button.
+                    </p>
+                    <p>
+                    To learn more about the dataset, click on the following: <a href="https://data.cityofnewyork.us/Health/COVID-19-Daily-Counts-of-Cases-Hospitalizations-an/rc75-m7u3" target="_blank">COVID-19 Daily Counts of Cases, Hospitalizations, and Deaths</a>.
+                    </p>
+                </div>  
+                <div class="col-sm-3" id="sideChart">
+                    <div id="toggleButtons" class="btn-group btn-group-toggle" data-toggle="buttons">
+                        <label class="btn btn-dark" id="option1button">
+                            <input type="radio" name="options" id="option1" onclick="dc.filterAll();dc.renderAll();toggleButton('#option1button')">NYC
+                        </label>
+                        <label class="btn btn-dark" id="option2button">
+                            <input type="radio" name="options" id="option2" onclick="dc.filterAll();dc.renderAll();toggleButton('#option2button')">MN
+                        </label>
+                        <label class="btn btn-dark" id="option3button">
+                            <input type="radio" name="options" id="option3" onclick="dc.filterAll();dc.renderAll();toggleButton('#option3button')">BX
+                        </label>
+                        <label class="btn btn-dark" id="option4button">
+                            <input type="radio" name="options" id="option4" onclick="dc.filterAll();dc.renderAll();toggleButton('#option4button')">BK
+                        </label>
+                        <label class="btn btn-dark" id="option5button">
+                            <input type="radio" name="options" id="option5" onclick="dc.filterAll();dc.renderAll();toggleButton('#option5button')">QN
+                        </label>
+                        <label class="btn btn-dark" id="option6button">
+                            <input type="radio" name="options" id="option6" onclick="dc.filterAll();dc.renderAll();toggleButton('#option6button')">SI
+                        </label>
+                    </div>
+                    <div id="summaryTableChart">
+                        <table id="summaryTable">
+                            <thead >
+                                <tr id="tablerow">
+                                    <th scope="col"></th>
+                                    <th scope="col" id="tableHeader">Topic</th>
+                                    <th scope="col" id="tableHeader">Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr id="tablerow">
+                                    <td class="bg-success"></td>
+                                    <td id="case_count"></td>
+                                    <td id="case_count_value"></td>
+                                </tr>
+                                <tr id="tablerow">
+                                    <td class="bg-warning"></td>
+                                    <td id="hospitalized_count"></td>
+                                    <td id="hospitalized_count_value"></td>
+                                </tr>
+                                <tr id="tablerow">
+                                    <td class="bg-danger"></td>
+                                    <td id="death_count"></td>
+                                    <td id="death_count_value"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>          
+            </div>
+            <div class= "row" id="mainRow">
+                <div class="col-md-9">
+                    <div id="covidChart" class="covidChart"></div>
+                    <div id="volumeChart" class="volumeChart"></div>
+                </div>
+                
+            </div>
+            <div class="row">
+                <div class="col-sm-12" id="footer">
+                    <strong>Bryan Menegazzo</strong>
+                    <br>
+                    <a href="https://www.linkedin.com/in/bryan-menegazzo-316293a4/" target="_blank">LinkedIn</a>
+                    <br>
+                    <a href="https://dc-js.github.io/dc.js/docs/html/dc.lineChart.html" target="_blank">GithHub</a>
+                </div>           
+            </div>
+        </div>
+    </div> 
+    <script>
+
+        window.onload = function() {
+            $("#option1button").trigger( "click" )
+        };
+        //Recycled formulas
+        var formatYear = d3.timeFormat("%Y")
+        var formatDate = d3.timeFormat("%-m/%-d/%Y")	
+        var formatDay = d3.timeFormat("%a")
+
+        //Data grouping
+        var finalData = crossfilter(data);
+        var all = finalData.groupAll();
+
+        var dateDim = finalData.dimension(function(d) { 
+            var dates = new Date(d.date_of_interest)
+            return [dates, d.Topic]
+        });
+            var nycGroup = dateDim.group().reduceSum(function(d) { 
+                return d.nyc; 
+            });
+            var mnGroup = dateDim.group().reduceSum(function(d) { 
+                return d.mn; 
+            });
+            var bxGroup = dateDim.group().reduceSum(function(d) { 
+                return d.bx; 
+            });
+            var bkGroup = dateDim.group().reduceSum(function(d) { 
+                return d.bk; 
+            });
+            var qnGroup = dateDim.group().reduceSum(function(d) { 
+                return d.qn; 
+            });
+            var siGroup = dateDim.group().reduceSum(function(d) { 
+                return d.si; 
+            });
+
+        var topicDim = finalData.dimension(function(d) { 
+            return d.Topic
+        });
+            var nyctopicGroup = topicDim.group().reduceSum(function(d) { 
+                return d.nyc; 
+            });
+            var mntopicGroup = topicDim.group().reduceSum(function(d) { 
+                return d.mn; 
+            });
+            var bxtopicGroup = topicDim.group().reduceSum(function(d) { 
+                return d.bx; 
+            });
+            var bktopicGroup = topicDim.group().reduceSum(function(d) { 
+                return d.bk; 
+            });
+            var qntopicGroup = topicDim.group().reduceSum(function(d) { 
+                return d.qn; 
+            });
+            var sitopicGroup = topicDim.group().reduceSum(function(d) { 
+                return d.si; 
+            });  
+
+        var dataTable = new dc.DataTable("#table")
+            .dimension(dateDim)
+            .sortBy(function(d) { return +d.date_of_interest; })
+            .showSections(false)
+            .columns([{
+                        label: "Date",
+                        format: function(d) { return formatDate(new Date(d.date_of_interest)); }
+                    },
+                    "Topic",
+                    "nyc",
+                    "mn",
+                    "bx",
+                    "bk",
+                    "qn",
+                    "si"
+                    ]);
+
+        function download() {
+
+            var data = dateDim.top(Infinity);
+            data = data.sort(function(a, b) {
+                return dataTable.order()(dataTable.sortBy()(a), dataTable.sortBy()(b));
+            });
+            data = data.map(function(d) {
+                var row = {};
+                dataTable.columns().forEach(function(c) {
+                    row[dataTable._doColumnHeaderFormat(c)] = dataTable._doColumnValueFormat(c, d);
+                });
+                return row;
+            });
+            var blob = new Blob([d3.csvFormat(data)], {type: "text/csv;charset=utf-8"});
+            saveAs(blob, "data.csv");
+        
+        }
+
+        function toggleButton(d) {
+
+            $("#option1button").removeClass("active")
+            $("#option2button").removeClass("active")
+            $("#option3button").removeClass("active")
+            $("#option4button").removeClass("active")
+            $("#option5button").removeClass("active")
+            $("#option6button").removeClass("active")
+
+            $(d).addClass("active")
+            chartUpdate(d)
+            summaryTableUpdate(d)
+
+        }
+
+        function chartUpdate(d) {
+
+            var date = new Date();  
+            var currentYear = formatYear(date);
+            
+            var min = new Date ( data[0]["date_of_interest"] )
+            var maxCalc = new Date ( data[data.length - 1]["date_of_interest"] )
+            var max = new Date ( maxCalc.setDate(maxCalc.getDate() + 7) )
+
+            var padValue = 40;
+            var group
+
+            if ( d == "#option1button" ) {
+                group = nycGroup
+            } else if ( d == "#option2button" ) {
+                group = mnGroup
+            } else if ( d == "#option3button" ) {
+                group = bxGroup
+            } else if ( d == "#option4button" ) {
+                group = bkGroup
+            } else if ( d == "#option5button" ) {
+                group = qnGroup
+            } else if ( d == "#option6button" ) {
+                group = siGroup
+            }          
+            
+            var volumeChart = new dc.SeriesChart("#volumeChart")
+                .width(825) 
+                .height(50)
+                .margins({top: 0, right: padValue, bottom: 20, left: padValue})
+                .elasticY(false)
+                .mouseZoomable(false)
+                .brushOn(true)
+                .dimension(dateDim)
+                .group(group)
+                .x(d3.scaleTime().domain([min , max]))
+                .chart(function(c) { 
+                    return dc.barChart(c)
+                })
+                .seriesAccessor(function(d) { return d.key[1]; })
+                .keyAccessor(function(d) { return d.key[0]; })
+                .valueAccessor(function(d) { return d.value; })
+                .transitionDuration(0)
+                .colors(d3.scaleOrdinal().range(["green","red","orange"]))
+
+            var covidChart = new dc.SeriesChart("#covidChart")
+                .width(825)
+                .height(250)
+                .margins({top: 0, right: padValue, bottom: 25, left: padValue})
+                //.yAxisLabel("Counts")
+                .dimension(dateDim)
+                .group(group)
+                .rangeChart(volumeChart)
+                .colors(d3.scaleOrdinal().range(["green","red","orange"]))
+                .elasticY(true)
+                .mouseZoomable(true)
+                .brushOn(false)
+                .renderHorizontalGridLines(true)
+                .x(d3.scaleTime().domain([min , max]))
+                .on("pretransition", function(covidChart) {
+
+                    //Adding the annotations to the covidChart to depict covidEvents and publicHolidays
+                    //NYC COVID Events
+
+                    //Since the chart is interactive we must remove all previously created annotations before creating new ones
+                    $(".covidEvents").each(function () {
+                        $(".covidEvents").remove();
+                    });
+
+                    $(".covidEventLabels").each(function () {
+                        $(".covidEventLabels").remove();
+                    });
+
+                    //Function used to create both the covidEvents and publicHolidays 
+                    var line = d3.line()
+                        .x(function(d) { 
+                            //since we added padding to the chart for the Y Axis we need to add padding to the lines we are making
+                            //always run d.x value through covidChart.x()()
+                            alignedX = covidChart.x()(d.x) + padValue
+                            return alignedX; 
+                        })
+                        .y(function(d) { 
+                            //we are assigning y values to the chart to plot it on the map. In all cases we pass the min and max yAxis values
+                            //always run d.x value through covidChart.x()()
+                            var yValue
+                            if ( d.y != 0 ) {
+                                yValue = covidChart.effectiveHeight()
+                            } else { 
+                                yValue = d.y
+                            }
+                            return yValue; 
+                        })
+                        .curve(d3.curveLinear);
+
+                    for ( i in covidEvents ) {
+                        
+                        var chartBody = covidChart.select("g");
+                        var path = chartBody.selectAll("path.extra").data([covidEvents[i].place]);
+                        var text = chartBody.selectAll("text.extra").data([covidEvents[i]])
+
+                        var covidColor = "#475c6c"
+    
+                        path = path.enter()
+                            .append("path")
+                            .attr("class", "covidEvents")
+                            .attr("stroke", covidColor)
+                            .attr("stroke-width", 1)
+                            .style("stroke-dasharray", ("10,3"))
+                            .merge(path);
+                        path.attr("d", line)
+
+                        text = text.enter()
+                            .append("text")
+                            .attr("class", "covidEventLabels")
+                            .attr("dy", "0.32em")
+                            .attr("text-anchor", "start")                            
+                            .attr("transform", function(d) {
+                                x = covidChart.x()(d.x) + padValue + 2
+                                y = 48.5
+                                return "translate(" + x + "," + y + ") rotate(-25)"
+                            })
+                            .text(function(d) { return d.label })
+                            .style("fill", covidColor)
+
+                    }
+
+                    //Public Holidays
+                    
+                    //Since the chart is interactive we must remove all previously created annotations before creating new ones
+                    $(".publicHolidays").each(function () {
+                        $(".publicHolidays").remove();
+                    });
+
+                    $(".publicHolidaysLabels").each(function () {
+                        $(".publicHolidaysLabels").remove();
+                    });
+
+                    for ( i in publicHolidays ) {
+                        
+                        var chartBody = covidChart.select("g");
+                        var path = chartBody.selectAll("path.extra").data([publicHolidays[i].place]);
+                        var text = chartBody.selectAll("text.extra").data([publicHolidays[i]])
+    
+                        var publicColor = "#999999"
+
+                        path = path.enter()
+                            .append("path")
+                            .attr("class", "publicHolidays")
+                            .attr("stroke", publicColor )
+                            .attr("stroke-width", 1)
+                            .style("stroke-dasharray", ("10,3"))
+                            .merge(path);
+                        path.attr("d", line)
+
+                        text = text.enter()
+                            .append("text")
+                            .attr("class", "publicHolidaysLabels")
+                            .attr("dy", "0.32em")
+                            .attr("text-anchor", "start")                            
+                            .attr("transform", function(d) {
+                                x = covidChart.x()(d.x) + padValue + 2
+                                y = 101.5
+                                return "translate(" + x + "," + y + ") rotate(-25)"
+                            })
+                            .text(function(d) { return d.label })
+                            .style("fill", publicColor )
+
+                    }
+
+                })
+                .chart(function(c) { 
+                    var newChart = new dc.LineChart(c)
+                        .curve(d3.curveCardinal)
+                        .renderDataPoints({radius: 1.5, fillOpacity: 1})
+                        .renderArea(false)
+                        
+                    return newChart
+                        
+                })
+                .seriesAccessor(function(d) { return d.key[1]; })
+                .keyAccessor(function(d) { return d.key[0]; })
+                .valueAccessor(function(d) { return d.value; })
+                .yAxis().tickFormat(function(d) { return d3.format(",d")(d); })
+              
+            dc.renderAll();
+            
+        }
+
+        function summaryTableUpdate(d) {
+
+            var topics
+
+            if ( d == "#option1button" ) {
+                topics = nyctopicGroup.all();
+            } else if ( d == "#option2button" ) {
+                topics = mntopicGroup.all();
+            } else if ( d == "#option3button" ) {
+                topics = bxtopicGroup.all();
+            } else if ( d == "#option4button" ) {
+                topics = bktopicGroup.all();
+            } else if ( d == "#option5button" ) {
+                topics = qntopicGroup.all();
+            } else if ( d == "#option6button" ) {
+                topics = sitopicGroup.all();
+            }
+
+            for ( i in topics ) {
+                keys = topics[i].key
+                $("#"+keys).text(topics[i].key) 
+                $("#"+keys+"_value").text(d3.format(",d")(topics[i].value))          
+            }
+
+        }
+
+        dc.renderAll();
+            
+    </script>
+
+</body>
